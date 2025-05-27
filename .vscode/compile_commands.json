@@ -1,0 +1,11 @@
+[
+{
+  "directory": "/home/xyyt/code/C_C++/EUI",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-target", "x86_64-linux-gnu", "-Ibuild/.gens/eui/linux/x86_64/platform/windows/idl", "-o", "build/.objs/eui/linux/x86_64/eui.c.o", "eui.c"],
+  "file": "eui.c"
+},
+{
+  "directory": "/home/xyyt/code/C_C++/EUI",
+  "arguments": ["/usr/bin/gcc", "-c", "-m64", "-target", "x86_64-linux-gnu", "-Ibuild/.gens/eui/linux/x86_64/platform/windows/idl", "-o", "build/.objs/eui/linux/x86_64/en8x5.c.o", "en8x5.c"],
+  "file": "en8x5.c"
+}]

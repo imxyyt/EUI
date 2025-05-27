@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+      "stdint.h": "c",
+      "en8x5.h": "c"
+    }
+}
