@@ -44,6 +44,97 @@
 | `EUI_KEY_MODE_DOUBLE` | 双击模式 |
 | `EUI_KEY_MODE_SHORT_NDOUBLE` | 短按但不触发双击 |
 
+## 🎯 焦点（Focus）工作原理
+
+EUI 的焦点（Focus）是一个"虚拟画笔"位置，所有绘图操作都以焦点为基准点进行。
+
+### 焦点变量
+
+```c
+extern uint8_t _EUI_FOCUS_X;      // 焦点的 X 坐标（水平像素位置）
+extern uint8_t _EUI_FOCUS_Y;      // 焦点的 Y 坐标（垂直像素位置）
+extern uint8_t _EUI_FOCUS_Y_H;    // 焦点所在的页索引（Y >> 3）
+extern uint8_t _EUI_FOCUS_Y_L;    // 焦点在页内的位偏移（Y & 0x07）
+```
+
+### 设计动机
+
+由于屏幕缓冲区采用**位压缩存储**（每字节存放 8 个垂直像素），定位一个像素需要执行除法和取模运算才能找到对应的 byte 和 bit。焦点机制**预计算**了 `_EUI_FOCUS_Y_H`（页索引）和 `_EUI_FOCUS_Y_L`（位偏移），避免在频繁的绘图操作中重复计算，提升性能。
+
+### 设置焦点
+
+```c
+#define eui_set_focus(x, y) {
+  _EUI_FOCUS_X = (x);
+  _EUI_FOCUS_Y = (y);
+  _EUI_FOCUS_Y_H = _EUI_FOCUS_Y >> 3;  // 计算页索引
+  _EUI_FOCUS_Y_L = _EUI_FOCUS_Y & 0x07; // 计算位偏移
+}
+```
+
+调用 `eui_set_focus(x, y)` 会同时更新所有四个焦点变量，将画笔定位到坐标 `(x, y)`。
+
+### 焦点与缓冲区的映射关系
+
+缓冲区 `EUI_buf[EUI_H>>3][EUI_W]` 的布局：
+
+```
+                   X 方向 →
+    ┌─────────────────────────────────────────┐
+    │  EUI_buf[0][0]  EUI_buf[0][1]  ...      │  ← 页 0（Y: 0~7）
+    │  bit7~bit0       bit7~bit0              │
+    ├─────────────────────────────────────────┤
+    │  EUI_buf[1][0]  EUI_buf[1][1]  ...      │  ← 页 1（Y: 8~15）
+    │  bit7~bit0       bit7~bit0              │
+    ├─────────────────────────────────────────┤
+    │  ...                                    │
+    └─────────────────────────────────────────┘
+```
+
+坐标 `(x, y)` 对应的像素位于：
+- **byte**: `EUI_buf[y >> 3][x]`
+- **bit**: `1 << (y & 0x07)`
+
+### 焦点在绘图中的使用
+
+所有绘图 API 都以当前焦点作为起点：
+
+| 操作 | 焦点含义 |
+|------|---------|
+| `eui_point()` | 在 `(FOCUS_X, FOCUS_Y)` 画一个点 |
+| `eui_line(x, y)` | 从 `(FOCUS_X, FOCUS_Y)` 到 `(x, y)` 画线 |
+| `eui_rect(w, h, style)` | 以 `(FOCUS_X, FOCUS_Y)` 为左上角画矩形 |
+| `eui_circle(r, style)` | 以 `(FOCUS_X, FOCUS_Y)` 为圆心画圆 |
+| `eui_putc(c)` | 在 `(FOCUS_X, FOCUS_Y)` 输出字符，**结束后自动推进 X** |
+| `eui_puts(x, y, str)` | 先调用 `eui_set_focus` 设置焦点，再逐个输出字符，支持 `\n` 换行、`\r` 回车 |
+
+### 焦点推进（Advance）
+
+字符输出后，焦点 X 会自动前进 `_EUI_INTERVAL` 个像素（默认 = 字宽 + 1），方便连续输出文本：
+
+```c
+// 输出 'H' 后焦点移动到下一个字符位置
+eui_putc('H');  // FOCUS_X += _EUI_INTERVAL
+eui_putc('i');  // FOCUS_X += _EUI_INTERVAL
+```
+
+换行符 `\n` 会使焦点 Y 增加一个字符高度，回车符 `\r` 使 X 回到行首。
+
+### 使用示例
+
+```c
+// 设置焦点到 (10, 10)，画一个空心矩形
+eui_set_focus(10, 10);
+eui_rect(30, 20, 0);
+
+// 在 (10, 35) 输出文本
+eui_puts(10, 35, "Hello");
+
+// 在圆心 (64, 32) 画圆
+eui_set_focus(64, 32);
+eui_circle(15, 0);
+```
+
 ## 坐标系与缓冲区
 
 屏幕缓冲区是一个位压缩的二维数组：
